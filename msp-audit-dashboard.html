@@ -797,6 +797,153 @@ function doExport(){
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='audit-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
 }
 
+
+function renderPolicyClientList() {
+  var clients = [...new Set(devs.map(function(d){return d.Site_Client;}))].filter(Boolean).sort();
+  var el = document.getElementById('policy-client-list');
+  if (!el) return;
+  el.innerHTML = clients.map(function(cl) {
+    var hasCustom = !!clientPolicies[cl];
+    var isSel = selPolicyClient === cl;
+    var safe = cl.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return '<div class="policy-client-row' + (isSel ? ' sel' : '') + '" onclick="selectPolicyClient(\'' + safe + '\')">' +
+      '<span style="font-size:11px;font-weight:' + (hasCustom ? '600' : '400') + '">' + cl + '</span>' +
+      '<span class="policy-badge ' + (hasCustom ? 'custom' : 'default') + '">' + (hasCustom ? 'Custom' : 'Default') + '</span>' +
+      '</div>';
+  }).join('');
+}
+
+function selectPolicyClient(cl) {
+  selPolicyClient = cl;
+  renderPolicyClientList();
+  renderPolicyEditor(cl);
+}
+
+function renderPolicyEditor(cl) {
+  var cfg = getCFG(cl);
+  var el = document.getElementById('policy-editor');
+  if (!el) return;
+  function tog(id, val) {
+    return '<label class="toggle"><input type="checkbox" id="' + id + '"' + (val ? ' checked' : '') + '>' +
+      '<div class="toggle-track"></div><div class="toggle-thumb"></div></label>';
+  }
+  var safe = cl.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  el.innerHTML =
+    '<div class="ph"><div class="pt"><div class="dot" style="background:var(--ac)"></div>' + cl + '</div>' +
+    '<span class="policy-saved-msg" id="policy-saved-msg">&#10003; Saved</span></div>' +
+    '<div class="policy-form">' +
+    '<div class="policy-section"><div class="policy-section-title">Endpoint Security</div>' +
+    '<div class="policy-row"><div><div class="policy-label">Require SentinelOne installed</div><div class="policy-desc">Device must have S1 agent present</div></div>' + tog('p-s1', cfg.requireS1) + '</div>' +
+    '<div class="policy-row"><div><div class="policy-label">Require S1 Connected</div><div class="policy-desc">S1 agent must show Connected status</div></div>' + tog('p-s1c', cfg.requireS1C) + '</div>' +
+    '<div class="policy-row"><div><div class="policy-label">Require RocketCyber agent</div><div class="policy-desc">Device must have RC SOC agent present</div></div>' + tog('p-rc', cfg.requireRC) + '</div>' +
+    '</div>' +
+    '<div class="policy-section"><div class="policy-section-title">Patching &amp; Updates</div>' +
+    '<div class="policy-row"><div><div class="policy-label">Require patch compliance</div><div class="policy-desc">Datto RMM patch status must be Compliant</div></div>' + tog('p-patch', cfg.requirePatch) + '</div>' +
+    '<div class="policy-row"><div><div class="policy-label">Require no reboot pending</div><div class="policy-desc">No reboot required flag from RMM or S1</div></div>' + tog('p-reboot', cfg.requireNoReboot) + '</div>' +
+    '</div>' +
+    '<div class="policy-section"><div class="policy-section-title">Availability &amp; Hardware</div>' +
+    '<div class="policy-row"><div><div class="policy-label">Max offline threshold (days)</div><div class="policy-desc">Days before device is flagged offline</div></div>' +
+    '<input class="policy-num" type="number" id="p-offline" min="1" max="90" value="' + cfg.maxOffline + '"></div>' +
+    '<div class="policy-row"><div><div class="policy-label">Require warranty not expired</div><div class="policy-desc">Flag devices with expired warranty</div></div>' + tog('p-warranty', cfg.requireWarranty) + '</div>' +
+    '</div></div>' +
+    '<div class="policy-actions">' +
+    '<button class="policy-save" onclick="savePolicy(\'' + safe + '\')">Save Policy</button>' +
+    '<button class="policy-reset" onclick="resetPolicy(\'' + safe + '\')">Reset to Default</button>' +
+    '<span style="flex:1"></span>' +
+    (clientPolicies[cl] ? '<span style="font-size:9px;color:var(--mu)">Custom policy active</span>' : '<span style="font-size:9px;color:var(--mu)">Using global defaults</span>') +
+    '</div>';
+}
+
+function savePolicy(cl) {
+  var btn = document.querySelector('.policy-save');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  var fields = {
+    Title: cl,
+    RequireS1:       document.getElementById('p-s1').checked,
+    RequireS1C:      document.getElementById('p-s1c').checked,
+    RequireRC:       document.getElementById('p-rc').checked,
+    RequirePatch:    document.getElementById('p-patch').checked,
+    RequireNoReboot: document.getElementById('p-reboot').checked,
+    RequireWarranty: document.getElementById('p-warranty').checked,
+    MaxOfflineDays:  parseInt(document.getElementById('p-offline').value) || 7
+  };
+  var existing = clientPolicies[cl];
+  getSiteId().then(function(siteId) {
+    return getListId('ClientConfig').then(function(listId) {
+      if (existing && existing._itemId) {
+        return getToken().then(function(r) {
+          return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/lists/'+listId+'/items/'+existing._itemId+'/fields',
+            {method:'PATCH',headers:{'Authorization':'Bearer '+r.accessToken,'Content-Type':'application/json'},body:JSON.stringify(fields)});
+        });
+      } else {
+        return getToken().then(function(r) {
+          return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/lists/'+listId+'/items',
+            {method:'POST',headers:{'Authorization':'Bearer '+r.accessToken,'Content-Type':'application/json'},body:JSON.stringify({fields:fields})});
+        }).then(function(r){return r.json();}).then(function(data){if(data&&data.id)fields._itemId=data.id;return{ok:true};});
+      }
+    });
+  }).then(function() {
+    clientPolicies[cl] = fields;
+    btn.disabled = false; btn.textContent = 'Save Policy';
+    var msg = document.getElementById('policy-saved-msg');
+    msg.style.display = 'inline';
+    setTimeout(function(){msg.style.display='none';}, 2500);
+    renderPolicyClientList(); renderAll();
+  }).catch(function(err) {
+    btn.disabled = false; btn.textContent = 'Save Policy';
+    alert('Save failed: ' + err.message);
+  });
+}
+
+function resetPolicy(cl) {
+  if (!confirm('Reset ' + cl + ' to global default policy?')) return;
+  var existing = clientPolicies[cl];
+  if (!existing || !existing._itemId) {
+    delete clientPolicies[cl]; renderPolicyClientList(); renderPolicyEditor(cl); return;
+  }
+  getSiteId().then(function(siteId) {
+    return getListId('ClientConfig').then(function(listId) {
+      return getToken().then(function(r) {
+        return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/lists/'+listId+'/items/'+existing._itemId,
+          {method:'DELETE',headers:{'Authorization':'Bearer '+r.accessToken}});
+      });
+    });
+  }).then(function() {
+    delete clientPolicies[cl]; renderPolicyClientList(); renderPolicyEditor(cl); renderAll();
+  }).catch(function(err){alert('Reset failed: '+err.message);});
+}
+
+var _listIdCache={};
+function getListId(name) {
+  if (_listIdCache[name]) return Promise.resolve(_listIdCache[name]);
+  return getSiteId().then(function(siteId) {
+    return getToken().then(function(result) {
+      return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/lists',
+        {headers:{'Authorization':'Bearer '+result.accessToken,'Accept':'application/json'}});
+    }).then(function(r){return r.json();}).then(function(d){
+      (d.value||[]).forEach(function(l){_listIdCache[l.displayName]=l.id;_listIdCache[l.name]=l.id;});
+      if(!_listIdCache[name]) throw new Error('List '+name+' not found');
+      return _listIdCache[name];
+    });
+  });
+}
+
+function loadClientConfigItemIds() {
+  getSiteId().then(function(siteId) {
+    return getListId('ClientConfig').then(function(listId) {
+      return getToken().then(function(result) {
+        return fetch('https://graph.microsoft.com/v1.0/sites/'+siteId+'/lists/'+listId+'/items?$expand=fields&$top=999',
+          {headers:{'Authorization':'Bearer '+result.accessToken,'Accept':'application/json'}});
+      }).then(function(r){return r.json();});
+    });
+  }).then(function(data) {
+    (data.value||[]).forEach(function(item) {
+      var title = item.fields && item.fields.Title;
+      if (title && clientPolicies[title]) clientPolicies[title]._itemId = item.id;
+    });
+  }).catch(function(){});
+}
+
 function startTimer(){if(tmr)clearInterval(tmr);tmr=setInterval(refreshData,5*60000);}
 refreshData();
 startTimer();
