@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSP Audit Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0f14;--sf:#13161e;--sf2:#1a1e2a;--sf3:#212638;--bd:rgba(255,255,255,0.07);--bd2:rgba(255,255,255,0.13);--tx:#e8eaf0;--mu:#7a7f96;--mu2:#555a72;--ac:#4f8ef7;--ac2:#7c5ff5;--gn:#2dd4a0;--rd:#f75f5f;--am:#f5a623;--cy:#38d5f7;--pk:#f75fa8;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--tx);font-family:'Syne',sans-serif;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(79,142,247,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(79,142,247,0.025) 1px,transparent 1px);background-size:48px 48px;pointer-events:none;z-index:0;}
+.app{position:relative;z-index:1;}
+header{border-bottom:1px solid var(--bd);padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;background:rgba(13,15,20,0.97);position:sticky;top:0;z-index:100;}
+.logo{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;letter-spacing:0.05em;}
+.logo-icon{width:28px;height:28px;background:linear-gradient(135deg,var(--ac),var(--ac2));border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#fff;}
+.hr{display:flex;align-items:center;gap:10px;}
+.si2{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--mu);display:flex;align-items:center;gap:5px;}
+.sd{width:6px;height:6px;border-radius:50%;background:var(--gn);animation:pulse 2.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.2;}}
+.btn{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:5px 12px;border-radius:5px;border:1px solid var(--bd2);background:var(--sf2);color:var(--tx);cursor:pointer;transition:all .15s;}
+.btn:hover{border-color:var(--ac);color:var(--ac);}
+.btnp{background:var(--ac);border-color:var(--ac);color:#fff;}
+.btnp:hover{background:#3d7ee8;color:#fff;}
+main{padding:18px 24px;max-width:1700px;margin:0 auto;}
+/* LOGIN SCREEN */
+.login-screen{display:flex;align-items:center;justify-content:center;min-height:60vh;}
+.login-card{background:var(--sf);border:1px solid var(--bd2);border-radius:14px;padding:40px;text-align:center;max-width:400px;width:100%;}
+.login-card h2{font-size:20px;font-weight:700;margin-bottom:8px;}
+.login-card p{font-size:12px;color:var(--mu);font-family:'IBM Plex Mono',monospace;margin-bottom:24px;line-height:1.6;}
+.login-btn{display:inline-flex;align-items:center;gap:10px;background:var(--ac);color:#fff;border:none;padding:12px 24px;border-radius:8px;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;}
+.login-btn:hover{background:#3d7ee8;}
+.login-btn svg{width:20px;height:20px;}
+/* ERROR */
+.err{background:rgba(247,95,95,0.08);border:1px solid rgba(247,95,95,0.2);border-radius:8px;padding:11px 16px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--rd);display:none;}
+/* VIEW TABS */
+.view-tabs{display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--bd);}
+.vtab{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:10px 20px;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;white-space:nowrap;}
+.vtab.on{color:var(--ac);border-bottom-color:var(--ac);}
+.vtab:hover:not(.on){color:var(--tx);}
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+.mc{background:var(--sf);border:1px solid var(--bd);border-radius:9px;padding:14px 16px;position:relative;overflow:hidden;}
+.mc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.mc.bl::before{background:var(--ac);}
+.mc.gr::before{background:var(--gn);}
+.mc.rd::before{background:var(--rd);}
+.mc.am::before{background:var(--am);}
+.mc.cy::before{background:var(--cy);}
+.mc.pu::before{background:var(--ac2);}
+.mc.pk::before{background:var(--pk);}
+.mcl{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:7px;}
+.mcv{font-size:26px;font-weight:700;line-height:1;}
+.mc.bl .mcv{color:var(--ac);}.mc.gr .mcv{color:var(--gn);}.mc.rd .mcv{color:var(--rd);}.mc.am .mcv{color:var(--am);}.mc.cy .mcv{color:var(--cy);}.mc.pu .mcv{color:var(--ac2);}.mc.pk .mcv{color:var(--pk);}
+.mcs{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);margin-top:2px;}
+/* PANEL */
+.panel{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden;margin-bottom:14px;}
+.ph{padding:11px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
+.pt{font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--mu);display:flex;align-items:center;gap:6px;}
+.pt .dot{width:5px;height:5px;border-radius:50%;}
+/* CLIENT SUMMARY TABLE */
+.csummary{width:100%;border-collapse:collapse;}
+.csummary thead th{padding:9px 14px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--bd);background:var(--sf);white-space:nowrap;}
+.csummary tbody tr{border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s;}
+.csummary tbody tr:hover{background:var(--sf2);}
+.csummary tbody tr:last-child{border-bottom:none;}
+.csummary tbody td{padding:10px 14px;font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.cname{font-size:12px;font-weight:700;color:var(--tx);}
+.score-bar{display:flex;align-items:center;gap:8px;}
+.sbar{width:60px;height:4px;background:var(--sf3);border-radius:2px;overflow:hidden;}
+.sbar-fill{height:100%;border-radius:2px;}
+.coverage-cell{display:flex;align-items:center;gap:6px;}
+/* DEVICE TABLE */
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+.tl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.lbl{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:0.08em;}
+.bk-btn{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:4px 10px;border-radius:5px;border:1px solid var(--bd2);background:transparent;color:var(--ac);cursor:pointer;}
+.chips{display:flex;gap:5px;flex-wrap:wrap;}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:3px 10px;border-radius:20px;border:1px solid var(--bd2);background:transparent;color:var(--mu);cursor:pointer;transition:all .15s;}
+.chip.on{background:var(--ac);border-color:var(--ac);color:#fff;}
+.chip:hover:not(.on){color:var(--tx);}
+.sw{position:relative;display:flex;align-items:center;}
+.sw svg{position:absolute;left:8px;pointer-events:none;color:var(--mu);}
+.si{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:5px 9px 5px 26px;background:var(--sf2);border:1px solid var(--bd2);border-radius:5px;color:var(--tx);outline:none;width:170px;}
+.si:focus{border-color:var(--ac);}
+.si::placeholder{color:var(--mu2);}
+.tab-bar{display:flex;border-bottom:1px solid var(--bd);overflow-x:auto;}
+.tab{font-family:'IBM Plex Mono',monospace;font-size:9px;padding:8px 12px;cursor:pointer;color:var(--mu);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;}
+.tab.on{color:var(--ac);border-bottom-color:var(--ac);}
+.tw{overflow-x:auto;max-height:480px;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;}
+thead th{padding:7px 11px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:0.07em;border-bottom:1px solid var(--bd);white-space:nowrap;cursor:pointer;user-select:none;background:var(--sf);position:sticky;top:0;z-index:1;}
+thead th:hover{color:var(--tx);}
+tbody tr{border-bottom:1px solid var(--bd);transition:background .1s;}
+tbody tr:hover{background:var(--sf2);}
+tbody tr:last-child{border-bottom:none;}
+tbody td{padding:8px 11px;font-family:'IBM Plex Mono',monospace;font-size:10px;white-space:nowrap;}
+.dn{font-weight:500;color:var(--tx);}
+.badge{display:inline-flex;align-items:center;gap:2px;padding:2px 6px;border-radius:9px;font-size:8px;font-family:'IBM Plex Mono',monospace;font-weight:500;}
+.bg{background:rgba(45,212,160,0.1);color:var(--gn);border:1px solid rgba(45,212,160,0.2);}
+.br{background:rgba(247,95,95,0.1);color:var(--rd);border:1px solid rgba(247,95,95,0.2);}
+.ba{background:rgba(245,166,35,0.1);color:var(--am);border:1px solid rgba(245,166,35,0.2);}
+.bb{background:rgba(79,142,247,0.1);color:var(--ac);border:1px solid rgba(79,142,247,0.2);}
+.bm{background:rgba(122,127,150,0.1);color:var(--mu);border:1px solid rgba(122,127,150,0.2);}
+.pips{display:flex;gap:3px;align-items:center;}
+.pip{display:inline-flex;align-items:center;justify-content:center;opacity:1;}
+.pip.ok svg{stroke:var(--gn);}
+.pip.no svg{stroke:var(--rd);}
+.pip.na svg{stroke:var(--sf3);opacity:0.4;}
+.empty{padding:36px 14px;text-align:center;color:var(--mu);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.loading{padding:36px 14px;text-align:center;color:var(--ac);font-family:'IBM Plex Mono',monospace;font-size:10px;}
+.htab{display:none;}.htab.on{display:table;}
+.bg2{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.li{padding:10px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:flex-start;gap:9px;}
+.li:last-child{border-bottom:none;}
+.ad{width:6px;height:6px;border-radius:50%;margin-top:3px;flex-shrink:0;}
+.ad.critical{background:var(--rd);box-shadow:0 0 5px var(--rd);}.ad.high{background:var(--pk);}.ad.warning{background:var(--am);}.ad.info{background:var(--ac);}
+.lit{font-size:11px;font-weight:500;margin-bottom:2px;}
+.lim{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);}
+.ri{padding:9px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;gap:9px;}
+.ri:last-child{border-bottom:none;}
+.rin{font-size:10px;font-weight:500;}
+.ris{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);margin-top:1px;}
+.bw{flex:1;max-width:60px;height:3px;background:var(--sf3);border-radius:2px;overflow:hidden;}
+.bf{height:100%;border-radius:2px;}
+.bf.fg{background:var(--gn);}.bf.fa{background:var(--am);}.bf.fr{background:var(--rd);}
+@media(max-width:1000px){.bg2{grid-template-columns:1fr 1fr;}}
+@media(max-width:650px){main{padding:12px;}.bg2{grid-template-columns:1fr;}.metrics{grid-template-columns:repeat(2,1fr);}}
+
+.policy-grid{display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start;}
+.policy-clients{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden;max-height:600px;overflow-y:auto;}
+.policy-client-row{padding:10px 16px;border-bottom:1px solid var(--bd);cursor:pointer;transition:background .1s;display:flex;align-items:center;justify-content:space-between;}
+.policy-client-row:hover{background:var(--sf2);}
+.policy-client-row.sel{background:var(--sf2);border-left:3px solid var(--ac);}
+.policy-client-row:last-child{border-bottom:none;}
+.policy-editor{background:var(--sf);border:1px solid var(--bd);border-radius:9px;overflow:hidden;}
+.policy-editor-empty{padding:60px 20px;text-align:center;color:var(--mu);font-family:'IBM Plex Mono',monospace;font-size:11px;}
+.policy-form{padding:20px;}
+.policy-section{margin-bottom:20px;}
+.policy-section-title{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid var(--bd);}
+.policy-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bd);}
+.policy-row:last-child{border-bottom:none;}
+.policy-label{font-size:12px;font-weight:500;}
+.policy-desc{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);margin-top:2px;}
+.toggle{position:relative;width:36px;height:20px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.toggle-track{position:absolute;inset:0;background:var(--sf3);border-radius:10px;cursor:pointer;transition:background .2s;border:1px solid var(--bd2);}
+.toggle input:checked+.toggle-track{background:var(--ac);border-color:var(--ac);}
+.toggle-thumb{position:absolute;top:2px;left:2px;width:14px;height:14px;background:#fff;border-radius:50%;transition:transform .2s;pointer-events:none;}
+.toggle input:checked~.toggle-thumb{transform:translateX(16px);}
+.policy-num{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:4px 8px;background:var(--sf2);border:1px solid var(--bd2);border-radius:4px;color:var(--tx);width:60px;text-align:center;}
+.policy-actions{display:flex;gap:8px;padding:16px 20px;border-top:1px solid var(--bd);background:var(--sf);}
+.policy-save{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:7px 18px;border-radius:5px;border:none;background:var(--ac);color:#fff;cursor:pointer;transition:background .15s;}
+.policy-save:hover{background:#3d7ee8;}
+.policy-save:disabled{opacity:0.5;cursor:not-allowed;}
+.policy-reset{font-family:'IBM Plex Mono',monospace;font-size:10px;padding:7px 14px;border-radius:5px;border:1px solid var(--bd2);background:transparent;color:var(--mu);cursor:pointer;}
+.policy-reset:hover{color:var(--tx);}
+.policy-badge{font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:9px;}
+.policy-badge.custom{background:rgba(79,142,247,0.1);color:var(--ac);border:1px solid rgba(79,142,247,0.2);}
+.policy-badge.default{background:var(--sf3);color:var(--mu);border:1px solid var(--bd);}
+.policy-saved-msg{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gn);display:none;}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo"><div class="logo-icon">AU</div>MSP Audit Dashboard</div>
+  <div class="hr">
+    <div class="si2"><div class="sd" id="syncDot" style="background:var(--mu)"></div><span id="ls">Not signed in</span></div>
+    <button class="btn" id="signOutBtn" style="display:none" onclick="signOut()">Sign out</button>
+    <button class="btn btnp" id="refreshBtn" style="display:none" onclick="refreshData()">↻ Refresh</button>
+  </div>
+</header>
+<main>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="logo-icon" style="width:48px;height:48px;font-size:16px;margin:0 auto 16px;border-radius:12px;">AU</div>
+    <h2>MSP Audit Dashboard</h2>
+    <p>Sign in with your Microsoft 365 account to load live device and security data from SharePoint.</p>
+    <button class="login-btn" onclick="signIn()">
+      <svg viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg>
+      Sign in with Microsoft 365
+    </button>
+    <div id="loginErr" style="display:none;margin-top:14px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--rd);background:rgba(247,95,95,0.08);border:1px solid rgba(247,95,95,0.2);border-radius:6px;padding:8px 12px;text-align:left;"></div>
+    <div style="margin-top:12px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);">If popup is blocked, allow popups for id-cos.github.io in Edge settings</div>
+  </div>
+</div>
+
+<!-- DASHBOARD (hidden until signed in) -->
+<div id="dashboardContent" style="display:none;">
+  <div class="err" id="errBanner"></div>
+
+  <div class="view-tabs">
+    <button class="vtab on" onclick="switchView('summary',this)">Client Summary</button>
+    <button class="vtab" onclick="switchView('devices',this)">All Devices</button>
+    <button class="vtab" onclick="switchView('alerts',this)">Alerts</button>
+    <button class="vtab" onclick="switchView('policy',this)">⚙ Policies</button>
+  </div>
+
+  <div class="metrics">
+    <div class="mc bl"><div class="mcl">Total Devices</div><div class="mcv" id="m0">—</div><div class="mcs" id="m0s">all clients</div></div>
+    <div class="mc gr"><div class="mcl">Compliant</div><div class="mcv" id="m1">—</div><div class="mcs" id="m1s">—%</div></div>
+    <div class="mc rd"><div class="mcl">Non-Compliant</div><div class="mcv" id="m2">—</div><div class="mcs" id="m2s">—%</div></div>
+    <div class="mc am"><div class="mcl">Offline</div><div class="mcv" id="m3">—</div><div class="mcs" id="m3s">past threshold</div></div>
+    <div class="mc pu"><div class="mcl">S1 Coverage</div><div class="mcv" id="m4">—</div><div class="mcs" id="m4s">—%</div></div>
+    <div class="mc cy"><div class="mcl">RC Coverage</div><div class="mcv" id="m5">—</div><div class="mcs" id="m5s">—%</div></div>
+    <div class="mc pk"><div class="mcl">Reboot Required</div><div class="mcv" id="m6">—</div><div class="mcs">RMM + S1 flags</div></div>
+    <div class="mc am"><div class="mcl">Active Alerts</div><div class="mcv" id="m7">—</div><div class="mcs">all sources</div></div>
+  </div>
+
+  <!-- CLIENT SUMMARY VIEW -->
+  <div id="view-summary">
+    <div class="panel">
+      <div class="ph">
+        <div class="pt"><div class="dot" style="background:var(--ac)"></div>Client Endpoint Summary</div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu)">Click a client to drill down</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="csummary">
+          <thead><tr>
+            <th>Client</th><th>Total</th><th>Compliant</th><th>Score</th>
+            <th>Online/Total</th><th>S1 Installed</th><th>S1 Connected</th>
+            <th>RC Agent</th><th>Patch OK</th><th>Reboot Req</th><th>Warranty Exp</th><th>Alerts</th>
+          </tr></thead>
+          <tbody id="clientSummaryBody"><tr><td colspan="13"><div class="loading">Loading...</div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bg2">
+      <div class="panel"><div class="ph"><div class="pt"><div class="dot" style="background:var(--rd)"></div>Recent Alerts</div></div><div id="alist"><div class="loading">Loading...</div></div></div>
+      <div class="panel"><div class="ph"><div class="pt"><div class="dot" style="background:var(--cy)"></div>M365 Licenses</div></div><div id="llist"><div class="empty">No license data yet</div></div></div>
+      <div class="panel"><div class="ph"><div class="pt"><div class="dot" style="background:var(--am)"></div>Backup Status</div></div><div id="bklist"><div class="empty">No backup data yet</div></div></div>
+    </div>
+  </div>
+
+  <!-- DEVICES VIEW -->
+  <div id="view-devices" style="display:none;">
+    <div class="topbar">
+      <div class="tl">
+        <button class="bk-btn" onclick="backToSummary()">← All Clients</button>
+        <span id="drillClientLabel" style="font-size:12px;color:var(--tx);font-weight:700;font-family:'Syne',sans-serif;"></span>
+        <div class="chips">
+          <button class="chip on" onclick="sf('all',this)">All</button>
+          <button class="chip" onclick="sf('fail',this)">Non-Compliant</button>
+          <button class="chip" onclick="sf('offline',this)">Offline</button>
+          <button class="chip" onclick="sf('nos1',this)">No S1</button>
+          <button class="chip" onclick="sf('norc',this)">No RC</button>
+          <button class="chip" onclick="sf('reboot',this)">Reboot Req</button>
+          <button class="chip" onclick="sf('decom',this)" style="border-color:var(--pk);color:var(--pk)">Decommissioned</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="sw"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg><input class="si" type="text" placeholder="Search..." oninput="onSrch(this.value)"></div>
+        <button class="btn" onclick="doExport()">↓ CSV</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ph"><div class="pt"><div class="dot" style="background:var(--ac)"></div>Device Inventory</div><span id="tc" style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu)"></span></div>
+      <div class="tab-bar">
+        <button class="tab on" onclick="stab('core',this)">Core</button>
+        <button class="tab" onclick="stab('sec',this)">Security</button>
+        <button class="tab" onclick="stab('patch',this)">Patch / OS</button>
+        <button class="tab" onclick="stab('hw',this)">Hardware</button>
+        <button class="tab" onclick="stab('net',this)">Network</button>
+      </div>
+      <div class="tw">
+        <table class="htab on" id="t-core"><thead><tr><th onclick="srt('Title')">Hostname</th><th onclick="srt('OS')">OS</th><th onclick="srt('Status_RMM')">Status</th><th onclick="srt('LastSeen_RMM')">Last Seen</th><th>Last User</th><th>Type</th><th>Compliance</th></tr></thead><tbody id="b-core"><tr><td colspan="7"><div class="loading">Loading...</div></td></tr></tbody></table>
+        <table class="htab" id="t-sec"><thead><tr><th>Hostname</th><th>S1 Agent</th><th>S1 Network</th><th>S1 Update</th><th>RC Status</th><th>EDR (RMM)</th><th>AV Product</th><th>AV Status</th><th>Disk Enc</th></tr></thead><tbody id="b-sec"></tbody></table>
+        <table class="htab" id="t-patch"><thead><tr><th>Hostname</th><th onclick="srt('PatchStatus')">Patch Status</th><th>Approved Pend</th><th>Not Approved</th><th>Installed</th><th>Reboot Req</th><th>WU Disabled</th><th>Win Display Ver</th></tr></thead><tbody id="b-patch"></tbody></table>
+        <table class="htab" id="t-hw"><thead><tr><th>Hostname</th><th>Manufacturer</th><th>Model</th><th>Serial</th><th onclick="srt('WarrantyExpiration')">Warranty</th><th>Memory</th><th>CPU</th><th>Cores</th></tr></thead><tbody id="b-hw"></tbody></table>
+        <table class="htab" id="t-net"><thead><tr><th>Hostname</th><th>Internal IP</th><th>External IP</th><th>MAC</th><th>Domain</th><th>RC IP</th></tr></thead><tbody id="b-net"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ALERTS VIEW -->
+  <div id="view-alerts" style="display:none;">
+    <div class="panel">
+      <div class="ph"><div class="pt"><div class="dot" style="background:var(--rd)"></div>All Security Alerts</div></div>
+      <div style="overflow-x:auto;">
+        <table><thead><tr><th>Severity</th><th>Alert</th><th>Client</th><th>Device</th><th>Source</th><th>Date</th></tr></thead>
+        <tbody id="alertTableBody"><tr><td colspan="6"><div class="loading">Loading...</div></td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- POLICY VIEW -->
+  <div id="view-policy" style="display:none;">
+    <div class="policy-grid">
+      <div>
+        <div class="panel" style="margin-bottom:10px;">
+          <div class="ph"><div class="pt"><div class="dot" style="background:var(--ac)"></div>Clients</div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu)">Click to configure</span></div>
+          <div id="policy-client-list"><div class="loading">Loading...</div></div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--mu);padding:8px 4px;line-height:1.6;">
+          <span style="color:var(--ac)">Custom</span> = overrides global defaults<br>
+          <span style="color:var(--mu)">Default</span> = uses global policy
+        </div>
+      </div>
+      <div class="policy-editor" id="policy-editor">
+        <div class="policy-editor-empty">← Select a client to configure its compliance policy</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+// ── MSAL CONFIG ────────────────────────────────────────────
+var TENANT_ID = '70e97a1b-5ab3-4459-9be0-e2e40801b79c';
+var CLIENT_ID = '83fee6ce-b8b2-4e09-9be1-a1f48c62b5be';
+var SITE_ID   = null; // fetched on first load
+var LIST_IDS  = {};
+
+var msalConfig = {
+  auth: {
+    clientId: CLIENT_ID,
+    authority: 'https://login.microsoftonline.com/' + TENANT_ID,
+    redirectUri: 'https://id-cos.github.io/msp-dashboard/msp-audit-dashboard.html'
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+};
+
+var msalInstance = null;
+try {
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+} catch(e) {
+  console.error('MSAL failed to initialize - library may be blocked:', e);
+}
+var SCOPES = ['Sites.Read.All', 'Sites.ReadWrite.All'];
+
+// ── AUTH ───────────────────────────────────────────────────
+function signIn() {
+  if (!msalInstance) {
+    document.getElementById('loginErr').textContent = 'Authentication library blocked. In Edge: Settings → Privacy → Tracking prevention → Exceptions → Add id-cos.github.io. Then refresh.';
+    document.getElementById('loginErr').style.display = 'block';
+    return;
+  }
+  var btn = document.querySelector('.login-btn');
+  btn.textContent = 'Opening sign-in...';
+  btn.disabled = true;
+  msalInstance.loginPopup({ scopes: SCOPES })
+    .then(function(result) {
+      msalInstance.setActiveAccount(result.account);
+      onSignedIn(result.account);
+    })
+    .catch(function(err) {
+      btn.innerHTML = '<svg viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:20px;height:20px"><rect x="1" y="1" width="10" height="10" fill="#f25022"/><rect x="12" y="1" width="10" height="10" fill="#7fba00"/><rect x="1" y="12" width="10" height="10" fill="#00a4ef"/><rect x="12" y="12" width="10" height="10" fill="#ffb900"/></svg> Sign in with Microsoft 365';
+      btn.disabled = false;
+      var errEl = document.getElementById('loginErr');
+      if (err.errorCode === 'popup_window_error' || (err.message && err.message.includes('popup'))) {
+        errEl.textContent = 'Popup blocked — allow popups for id-cos.github.io in Edge settings (Settings → Cookies and site permissions → Pop-ups and redirects → Allow).';
+      } else if (err.errorCode !== 'user_cancelled') {
+        errEl.textContent = 'Sign in failed: ' + (err.message || err.errorCode || 'unknown error');
+      } else {
+        errEl.style.display = 'none';
+        return;
+      }
+      errEl.style.display = 'block';
+    });
+}
+
+function signOut() {
+  msalInstance.logoutPopup().then(function() {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('dashboardContent').style.display = 'none';
+    document.getElementById('refreshBtn').style.display = 'none';
+    document.getElementById('signOutBtn').style.display = 'none';
+    document.getElementById('ls').textContent = 'Not signed in';
+    document.getElementById('syncDot').style.background = 'var(--mu)';
+  });
+}
+
+function onSignedIn(account) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('dashboardContent').style.display = 'block';
+  document.getElementById('refreshBtn').style.display = 'inline-flex';
+  document.getElementById('signOutBtn').style.display = 'inline-flex';
+  document.getElementById('ls').textContent = account.username;
+  document.getElementById('syncDot').style.background = 'var(--gn)';
+  refreshData();
+}
+
+function getToken() {
+  var account = msalInstance.getActiveAccount();
+  if (!account) {
+    var accounts = msalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+      account = accounts[0];
+      msalInstance.setActiveAccount(account);
+    }
+  }
+  return msalInstance.acquireTokenSilent({ scopes: SCOPES, account: account })
+    .catch(function() {
+      return msalInstance.acquireTokenPopup({ scopes: SCOPES });
+    });
+}
+
+// Check if already signed in from previous session
+if(msalInstance) msalInstance.handleRedirectPromise().then(function() {
+  var accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    msalInstance.setActiveAccount(accounts[0]);
+    onSignedIn(accounts[0]);
+  }
+}).catch(function(err) { console.error('Init error:', err); });
+
+// ── GRAPH API ──────────────────────────────────────────────
+var GRAPH = 'https://graph.microsoft.com/v1.0';
+
+function graphGet(url) {
+  return getToken().then(function(result) {
+    return fetch(GRAPH + url, {
+      headers: { 'Authorization': 'Bearer ' + result.accessToken, 'Accept': 'application/json' }
+    });
+  }).then(function(r) {
+    if (!r.ok) throw new Error('Graph ' + r.status + ' on ' + url);
+    return r.json();
+  });
+}
+
+function getSiteId() {
+  if (SITE_ID) return Promise.resolve(SITE_ID);
+  return graphGet('/sites/corstar1.sharepoint.com:/sites/ITDeviceDashboard')
+    .then(function(d) { SITE_ID = d.id; return SITE_ID; });
+}
+
+function getListId(name) {
+  if (LIST_IDS[name]) return Promise.resolve(LIST_IDS[name]);
+  return getSiteId().then(function(siteId) {
+    return graphGet('/sites/' + siteId + '/lists?$filter=displayName eq \'' + name + '\'');
+  }).then(function(d) {
+    var id = d.value[0] && d.value[0].id;
+    LIST_IDS[name] = id;
+    return id;
+  });
+}
+
+function getListItems(name, fields) {
+  return Promise.all([getSiteId(), getListId(name)]).then(function(res) {
+    var siteId = res[0], listId = res[1];
+    var items = [];
+    function fetchPage(url) {
+      return getToken().then(function(result) {
+        return fetch(url, {
+          headers: { 'Authorization': 'Bearer ' + result.accessToken, 'Accept': 'application/json' }
+        });
+      }).then(function(r) { return r.json(); })
+        .then(function(d) {
+          (d.value || []).forEach(function(item) { items.push(item.fields || {}); });
+          if (d['@odata.nextLink']) return fetchPage(d['@odata.nextLink']);
+          return items;
+        });
+    }
+    var url = GRAPH + '/sites/' + siteId + '/lists/' + listId + '/items?$expand=fields&$top=999';
+    if (fields) url += '&$select=fields(' + fields + ')';
+    return fetchPage(url);
+  });
+}
+
+// ── STATE ──────────────────────────────────────────────────
+var devs=[],alrs=[],lics=[],baks=[],decom=[],clientPolicies={};
+var selPolicyClient=null,policyDirty=false;
+var activeF='all',activeC='all',srch='',scol='LastSeen_RMM',sasc=false,atab='core',activeView='summary',tmr=null;
+var CFG={requireS1:true,requireS1C:true,requireRC:true,requirePatch:true,requireNoReboot:false,requireWarranty:false,maxOffline:7};
+
+function refreshData() {
+  document.getElementById('ls').textContent = 'Syncing...';
+  hideErr();
+  Promise.all([
+    getListItems('Devices'),
+    getListItems('SecurityAlerts').catch(function(){return[];}),
+    getListItems('M365Licenses').catch(function(){return[];}),
+    getListItems('SaaSBackup').catch(function(){return[];}),
+    getListItems('DecommissionedDevices').catch(function(){return[];}),
+    getListItems('ClientConfig').catch(function(){return[];})
+  ]).then(function(res) {
+    devs=res[0]; alrs=res[1]; lics=res[2]; baks=res[3]; decom=res[4];
+    // Build clientPolicies map from ClientConfig list
+    clientPolicies={};
+    (res[5]||[]).forEach(function(c){if(c.Title)clientPolicies[c.Title]=c;});
+    renderAll();
+    var acct = msalInstance.getActiveAccount();
+    document.getElementById('ls').textContent = 'Last sync: ' + new Date().toLocaleTimeString();
+    if(activeView==='policy'){renderPolicyClientList();}
+  }).catch(function(err) {
+    document.getElementById('ls').textContent = 'Sync failed';
+    showErr('Failed to load data: ' + err.message);
+    console.error(err);
+  });
+}
+
+function showErr(m){var e=document.getElementById('errBanner');e.textContent=m;e.style.display='block';}
+function hideErr(){document.getElementById('errBanner').style.display='none';}
+
+// ── COMPLIANCE ─────────────────────────────────────────────
+function getCFG(client) {
+  var p = client && clientPolicies[client];
+  return {
+    requireS1:      p && p.RequireS1      !== undefined ? p.RequireS1      : CFG.requireS1,
+    requireS1C:     p && p.RequireS1C     !== undefined ? p.RequireS1C     : CFG.requireS1C,
+    requireRC:      p && p.RequireRC      !== undefined ? p.RequireRC      : CFG.requireRC,
+    requirePatch:   p && p.RequirePatch   !== undefined ? p.RequirePatch   : CFG.requirePatch,
+    requireNoReboot:p && p.RequireNoReboot!== undefined ? p.RequireNoReboot: CFG.requireNoReboot,
+    requireWarranty:p && p.RequireWarranty!== undefined ? p.RequireWarranty: CFG.requireWarranty,
+    maxOffline:     p && p.MaxOfflineDays  > 0          ? p.MaxOfflineDays : CFG.maxOffline
+  };
+}
+
+function deviceIcon(raw) {
+  // raw may be a string like "{'category': 'Laptop', 'type': 'Notebook'}" or just "Desktop"
+  var cat = '', typ = '';
+  if (raw && typeof raw === 'string') {
+    var cm = raw.match(/category['":\s]+([A-Za-z\s]+)/);
+    var tm = raw.match(/type['":\s]+([A-Za-z\s]+)/);
+    cat = cm ? cm[1].trim().toLowerCase() : raw.toLowerCase();
+    typ = tm ? tm[1].trim().toLowerCase() : '';
+  }
+  var combined = cat + ' ' + typ;
+
+  var icon, label;
+  if (combined.indexOf('server') !== -1 || combined.indexOf('main system chassis') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>';
+    label = 'Server';
+  } else if (combined.indexOf('laptop') !== -1 || combined.indexOf('notebook') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>';
+    label = 'Laptop';
+  } else if (combined.indexOf('desktop') !== -1 || combined.indexOf('workstation') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>';
+    label = 'Desktop';
+  } else if (combined.indexOf('printer') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>';
+    label = 'Printer';
+  } else if (combined.indexOf('network') !== -1 || combined.indexOf('switch') !== -1 || combined.indexOf('router') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="8" width="20" height="8" rx="2"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/><path d="M12 8V4"/><path d="M8 4h8"/></svg>';
+    label = 'Network';
+  } else if (combined.indexOf('mobile') !== -1 || combined.indexOf('phone') !== -1 || combined.indexOf('tablet') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>';
+    label = 'Mobile';
+  } else if (combined.indexOf('virtual') !== -1 || combined.indexOf('vm') !== -1) {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><rect x="6" y="7" width="5" height="4" rx="1"/><rect x="13" y="7" width="5" height="4" rx="1"/></svg>';
+    label = 'Virtual';
+  } else {
+    icon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="12" cy="12" r="3"/></svg>';
+    label = raw || 'Device';
+  }
+
+  return '<span title="' + label + '" style="display:inline-flex;align-items:center;color:var(--mu);cursor:default;">' + icon + '</span>';
+}
+
+function comply(d) {
+  var cfg = getCFG(d.Site_Client);
+  var off=(Date.now()-new Date(d.LastSeen_RMM))/86400000;
+  var wexp=d.WarrantyExpiration?new Date(d.WarrantyExpiration)<new Date():false;
+  var c={online:off<=cfg.maxOffline,s1:!cfg.requireS1||d.S1_Installed,s1c:!cfg.requireS1C||!d.S1_Installed||(d.S1_NetworkStatus==='Connected'),rc:!cfg.requireRC||d.RC_Installed,patch:!cfg.requirePatch||(d.PatchStatus==='Compliant'),reboot:!cfg.requireNoReboot||(!d.RebootRequired&&!d.S1_RebootRequired),warranty:!cfg.requireWarranty||!wexp};
+  return{ok:Object.values(c).every(Boolean),c:c};
+}
+
+function pips(d){
+  var r=comply(d);
+  var pcfg=getCFG(d.Site_Client);
+  // [key, required, icon_svg, label]
+  var icons = {
+    online: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6s4-4 11-4 11 4 11 4"/><path d="M5 10s3-3 7-3 7 3 7 3"/><path d="M9 14s2-2 3-2 3 2 3 2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>',
+    s1:     '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    s1c:    '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>',
+    rc:     '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+    patch:  '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+    reboot: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+  };
+  var keys =  ['online','s1','s1c','rc','patch','reboot'];
+  var reqs =  [true, pcfg.requireS1, pcfg.requireS1C, pcfg.requireRC, pcfg.requirePatch, pcfg.requireNoReboot];
+  var lbls =  ['Online','S1 Installed','S1 Connected','RC Agent','Patched','No Reboot Pending'];
+  return '<div class="pips">'+keys.map(function(k,i){
+    var req = reqs[i];
+    var cls = !req ? 'na' : r.c[k] ? 'ok' : 'no';
+    var tip = lbls[i] + ': ' + (!req ? 'N/A' : r.c[k] ? 'Pass' : 'Fail');
+    return '<span class="pip '+cls+'" title="'+tip+'">'+icons[k]+'</span>';
+  }).join('')+'</div>';
+}
+</script>
+</body>
+</html>
